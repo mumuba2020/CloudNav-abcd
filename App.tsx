@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
-  Pin, Settings, Lock, CloudCog, Github, GitFork, GripVertical, Save, CheckSquare, LogOut, ExternalLink
+  Pin, Settings, Lock, CloudCog, Github, GitFork, GripVertical, Save, CheckSquare, LogOut, ExternalLink, X
 } from 'lucide-react';
 import {
   DndContext,
@@ -1729,6 +1729,55 @@ function App() {
     });
   }, [links, selectedCategory, searchQuery, categories, unlockedCategoryIds]);
 
+  // 计算其他目录的搜索结果
+  const otherCategoryResults = useMemo(() => {
+    if (!searchQuery.trim() || selectedCategory === 'all') {
+      return [];
+    }
+
+    const q = searchQuery.toLowerCase();
+    
+    // 获取其他目录中匹配的链接
+    const otherLinks = links.filter(link => {
+      // 排除当前目录的链接
+      if (link.categoryId === selectedCategory) {
+        return false;
+      }
+      
+      // 排除锁定的目录
+      if (isCategoryLocked(link.categoryId)) {
+        return false;
+      }
+      
+      // 搜索匹配
+      return (
+        link.title.toLowerCase().includes(q) || 
+        link.url.toLowerCase().includes(q) ||
+        (link.description && link.description.toLowerCase().includes(q))
+      );
+    });
+
+    // 按目录分组
+    const groupedByCategory = otherLinks.reduce((acc, link) => {
+      if (!acc[link.categoryId]) {
+        acc[link.categoryId] = [];
+      }
+      acc[link.categoryId].push(link);
+      return acc;
+    }, {} as Record<string, LinkItem[]>);
+
+    // 对每个目录内的链接进行排序
+    Object.keys(groupedByCategory).forEach(categoryId => {
+      groupedByCategory[categoryId].sort((a, b) => {
+        const aOrder = a.order !== undefined ? a.order : a.createdAt;
+        const bOrder = b.order !== undefined ? b.order : b.createdAt;
+        return aOrder - bOrder;
+      });
+    });
+
+    return groupedByCategory;
+  }, [links, selectedCategory, searchQuery, categories, unlockedCategoryIds]);
+
 
   // --- Render Components ---
 
@@ -2118,7 +2167,7 @@ function App() {
                  title="Fork this project on GitHub"
                >
                  <GitFork size={14} />
-                 <span>Fork 项目 v1.7</span>
+                 <span>Fork 项目 v1.7.1</span>
                </a>
             </div>
         </div>
@@ -2284,10 +2333,20 @@ function App() {
                 {searchMode === 'external' && searchQuery.trim() && (
                   <button
                     onClick={handleExternalSearch}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-500"
+                    className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-500"
                     title="执行站外搜索"
                   >
                     <ExternalLink size={14} />
+                  </button>
+                )}
+                
+                {searchQuery.trim() && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 transition-all"
+                    title="清空搜索"
+                  >
+                    <X size={12} strokeWidth={2.5} />
                   </button>
                 )}
               </div>
@@ -2596,6 +2655,59 @@ function App() {
                     )
                  )}
             </section>
+            )}
+
+            {/* 其他目录搜索结果区域 */}
+            {searchQuery.trim() && selectedCategory !== 'all' && (
+              <section className="mt-8 pt-8 border-t-2 border-slate-200 dark:border-slate-700">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-folder-search">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                    <path d="M11 11h.01"></path>
+                  </svg>
+                  其他目录搜索结果
+                  <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 rounded-full">
+                    {Object.values(otherCategoryResults).flat().length}
+                  </span>
+                </h2>
+
+                {Object.keys(otherCategoryResults).length > 0 ? (
+                  Object.entries(otherCategoryResults).map(([categoryId, links]) => {
+                    const category = categories.find(c => c.id === categoryId);
+                    if (!category) return null;
+
+                    return (
+                      <div key={categoryId} className="mb-6 last:mb-0">
+                        <div className="flex items-center gap-2 mb-3">
+                          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            {category.name}
+                          </h3>
+                          <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-full">
+                            {links.length}
+                          </span>
+                        </div>
+
+                        <div className={`grid gap-3 ${
+                          siteSettings.cardStyle === 'detailed' 
+                            ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6' 
+                            : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'
+                        }`}>
+                          {links.map(link => renderLinkCard(link))}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-30 mb-4">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                    <p className="text-sm">其他目录中没有找到相关内容</p>
+                  </div>
+                )}
+              </section>
             )}
         </div>
       </main>
